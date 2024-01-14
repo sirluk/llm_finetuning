@@ -18,17 +18,16 @@ from transformers import (
 
 
 def tokenize_examples(examples, tokenizer):
-    tokenized_inputs = tokenizer(examples['text'], padding='longest')
+    tokenized_inputs = tokenizer(examples['text'])
     tokenized_inputs['labels'] = examples['labels']
     return tokenized_inputs
 
 
-def collate_fn(batch):
-    import IPython; IPython.embed(); exit(1)
-    d = {k: [dic[k] for dict in batch] for k in batch[0] if k in ['input_ids', 'attention_mask', 'labels']}
+def collate_fn(batch, tokenizer):
+    d = {k: [dic[k] for dic in batch] for k in batch[0] if k in ['input_ids', 'attention_mask', 'labels']}
     d['input_ids'] = torch.nn.utils.rnn.pad_sequence([torch.tensor(x) for x in d['input_ids']], batch_first=True, padding_value=tokenizer.pad_token_id)
     d['attention_mask'] = torch.nn.utils.rnn.pad_sequence([torch.tensor(x) for x in d['attention_mask']], batch_first=True, padding_value=0)
-    d['labels'] = torch.tensor(d['labels'])
+    d['labels'] = torch.stack(d['labels'])
     return d
 
 
@@ -45,10 +44,10 @@ def compute_metrics(p):
 
 
 class CustomTrainer(Trainer):
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        #self._save_tpu = self._save
+
+    def __init__(self, label_weights, **kwargs):
+        super().__init__(**kwargs)
+        self.label_weights = label_weights
     
     def compute_loss(self, model, inputs, return_outputs=False):
         labels = inputs.pop("labels")
@@ -58,14 +57,14 @@ class CustomTrainer(Trainer):
         logits = outputs.get("logits")
         
         # compute custom loss
-        loss = F.binary_cross_entropy_with_logits(logits, labels.to(torch.float32))
+        loss = F.binary_cross_entropy_with_logits(logits, labels.to(torch.float32), pos_weight=self.label_weights)
         return (loss, outputs) if return_outputs else loss
-
+    
 
 random.seed(0)
 
 # load data
-with open('tutorial_data/train.csv', newline='') as csvfile:
+with open('train.csv', newline='') as csvfile:
     data = list(csv.reader(csvfile, delimiter=','))
     header_row = data.pop(0)
 
@@ -73,6 +72,7 @@ random.shuffle(data)
  
 idx, text, labels = list(zip(*[(int(row[0]), f'Title: {row[1].strip()}\n\nAbstract: {row[2].strip()}', row[3:]) for row in data]))
 labels = np.array(labels, dtype=int)
+label_weights = 1 - labels.sum(axis=0) / labels.sum()
 
 # stratified train test split for multilable ds
 row_ids = np.arange(len(labels))
@@ -111,7 +111,7 @@ lora_config = LoraConfig(
 )
 
 # load model
-model = AutoModelForSequenceClassification.from_pretrained("mistralai/Mistral-7B-v0.1", quantization_config=quantization_config, num_labels=labels.shape[1], device_map='cpu')
+model = AutoModelForSequenceClassification.from_pretrained("mistralai/Mistral-7B-v0.1", quantization_config=quantization_config, num_labels=labels.shape[1])
 model = prepare_model_for_kbit_training(model)
 model = get_peft_model(model, lora_config)
 model.config.pad_token_id = tokenizer.pad_token_id
@@ -120,14 +120,13 @@ model.config.pad_token_id = tokenizer.pad_token_id
 training_args = TrainingArguments(
     output_dir="mistral7b-lora-classification",
     learning_rate=1e-4,
-    per_device_train_batch_size=16,
-    per_device_eval_batch_size=16,
+    per_device_train_batch_size=1,
+    per_device_eval_batch_size=1,
     num_train_epochs=10,
     weight_decay=0.01,
     evaluation_strategy="epoch",
     save_strategy="epoch",
-    load_best_model_at_end=True,
-    use_cpu=True
+    load_best_model_at_end=True
 )
 
 # train
@@ -137,8 +136,9 @@ trainer = CustomTrainer(
     train_dataset=tokenized_ds["train"],
     eval_dataset=tokenized_ds["val"],
     tokenizer=tokenizer,
-    data_collator=collate_fn,
-    compute_metrics=compute_metrics
+    data_collator=functools.partial(collate_fn, tokenizer=tokenizer),
+    compute_metrics=compute_metrics,
+    label_weights=torch.tensor(label_weights, device=model.device)
 )
 
 trainer.train()
