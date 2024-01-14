@@ -18,13 +18,14 @@ from transformers import (
 
 
 def tokenize_examples(examples, tokenizer):
-    tokenized_inputs = tokenizer(examples['text'])
+    tokenized_inputs = tokenizer(examples['text'], padding='longest')
     tokenized_inputs['labels'] = examples['labels']
     return tokenized_inputs
 
 
 def collate_fn(batch):
-    d = {k: [dic[k] for dic in batch] for k in batch[0] if k in ['input_ids', 'attention_mask', 'labels']}
+    import IPython; IPython.embed(); exit(1)
+    d = {k: [dic[k] for dict in batch] for k in batch[0] if k in ['input_ids', 'attention_mask', 'labels']}
     d['input_ids'] = torch.nn.utils.rnn.pad_sequence([torch.tensor(x) for x in d['input_ids']], batch_first=True, padding_value=tokenizer.pad_token_id)
     d['attention_mask'] = torch.nn.utils.rnn.pad_sequence([torch.tensor(x) for x in d['attention_mask']], batch_first=True, padding_value=0)
     d['labels'] = torch.tensor(d['labels'])
@@ -45,6 +46,10 @@ def compute_metrics(p):
 
 class CustomTrainer(Trainer):
     
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        #self._save_tpu = self._save
+    
     def compute_loss(self, model, inputs, return_outputs=False):
         labels = inputs.pop("labels")
         
@@ -60,7 +65,7 @@ class CustomTrainer(Trainer):
 random.seed(0)
 
 # load data
-with open('train.csv', newline='') as csvfile:
+with open('tutorial_data/train.csv', newline='') as csvfile:
     data = list(csv.reader(csvfile, delimiter=','))
     header_row = data.pop(0)
 
@@ -83,11 +88,9 @@ ds = DatasetDict({
 
 # tokenizer dataset
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
-tokenize_ds = functools.partial(tokenize_examples, tokenizer=tokenizer)
-tokenized_ds = ds.map(tokenize_ds, batched=True)
-
-# set pad token
 tokenizer.pad_token = tokenizer.eos_token
+tokenized_ds = ds.map(functools.partial(tokenize_examples, tokenizer=tokenizer), batched=True)
+tokenized_ds = tokenized_ds.with_format("torch")
 
 # qunatization config
 quantization_config = BitsAndBytesConfig(
@@ -108,7 +111,7 @@ lora_config = LoraConfig(
 )
 
 # load model
-model = AutoModelForSequenceClassification.from_pretrained("mistralai/Mistral-7B-v0.1", quantization_config=quantization_config, num_labels=labels.shape[1])
+model = AutoModelForSequenceClassification.from_pretrained("mistralai/Mistral-7B-v0.1", quantization_config=quantization_config, num_labels=labels.shape[1], device_map='cpu')
 model = prepare_model_for_kbit_training(model)
 model = get_peft_model(model, lora_config)
 model.config.pad_token_id = tokenizer.pad_token_id
@@ -124,7 +127,7 @@ training_args = TrainingArguments(
     evaluation_strategy="epoch",
     save_strategy="epoch",
     load_best_model_at_end=True,
-    use_cpu=False
+    use_cpu=True
 )
 
 # train
