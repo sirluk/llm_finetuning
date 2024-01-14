@@ -45,10 +45,6 @@ def compute_metrics(p):
 
 class CustomTrainer(Trainer):
     
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._save_tpu = self._save
-    
     def compute_loss(self, model, inputs, return_outputs=False):
         labels = inputs.pop("labels")
         
@@ -64,7 +60,7 @@ class CustomTrainer(Trainer):
 random.seed(0)
 
 # load data
-with open('tutorial_data/train.csv', newline='') as csvfile:
+with open('train.csv', newline='') as csvfile:
     data = list(csv.reader(csvfile, delimiter=','))
     header_row = data.pop(0)
 
