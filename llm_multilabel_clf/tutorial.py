@@ -86,9 +86,6 @@ def load_data():
                                    for row in data]))
     labels = np.array(labels, dtype=int)
 
-    # create label weights
-    label_weights = 1 - labels.sum(axis=0) / labels.sum()
-
     # stratified train test split for multilabel dataset
     row_ids = np.arange(len(labels))
     train_idx, y_train, val_idx, y_val = iterative_train_test_split(row_ids[:, np.newaxis], labels, test_size=0.1)
@@ -100,17 +97,18 @@ def load_data():
         'train': Dataset.from_dict({'text': x_train, 'labels': y_train}),
         'val': Dataset.from_dict({'text': x_val, 'labels': y_val})
     })
-    return label_weights, dataset, labels
+    return dataset
 
 
-def main(): 
+def main():
     # set random seed
     random.seed(0)
 
-    label_weights, dataset, labels = load_data()
+    dataset = load_data()
 
     # model name
-    model_name = 'mistralai/Mistral-7B-v0.1'
+    # model_name = 'mistralai/Mistral-7B-v0.1'
+    model_name = 'echarlaix/tiny-random-mistral'
 
     # preprocess dataset with tokenizer
     def tokenize_examples(examples, tokenizer):
@@ -122,6 +120,10 @@ def main():
     tokenizer.pad_token = tokenizer.eos_token
     tokenized_ds = dataset.map(functools.partial(tokenize_examples, tokenizer=tokenizer), batched=True)
     tokenized_ds = tokenized_ds.with_format('torch')
+
+    # create label weights
+    labels= tokenized_ds['train']['labels']
+    label_weights = 1 - labels.sum(axis=0) / labels.sum()
 
     # qunatization config
     quantization_config = BitsAndBytesConfig(
@@ -145,7 +147,7 @@ def main():
     model = AutoModelForSequenceClassification.from_pretrained(
         model_name,
         quantization_config=quantization_config,
-        num_labels=labels.shape[1]
+        num_labels=tokenized_ds['train']['labels'].shape[1]
     )
     model = prepare_model_for_kbit_training(model)
     model = get_peft_model(model, lora_config)
@@ -190,4 +192,4 @@ if __name__ == "__main__":
 
 def load_model():
     peft_model_id = 'multilabel_mistral'
-    model = AutoModelForSequenceClassification.from_pretrained(peft_model_id)
+    return AutoModelForSequenceClassification.from_pretrained(peft_model_id)
