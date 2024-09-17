@@ -119,7 +119,7 @@ def main(dataset=None, model_name='mistralai/Mistral-7B-v0.1'):
     tokenized_ds = tokenized_ds.with_format('torch')
 
     # create label weights
-    labels= tokenized_ds['train']['labels']
+    labels = tokenized_ds['train']['labels']
     label_weights = 1 - labels.sum(axis=0) / labels.sum()
 
     # qunatization config
