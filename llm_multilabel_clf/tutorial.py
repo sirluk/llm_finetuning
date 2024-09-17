@@ -183,10 +183,11 @@ def main():
     trainer.model.save_pretrained(peft_model_id)
     tokenizer.save_pretrained(peft_model_id)
 
-    # load model
-    peft_model_id = 'multilabel_mistral'
-    model = AutoModelForSequenceClassification.from_pretrained(peft_model_id)
-
 
 if __name__ == "__main__":
     main()
+
+
+def load_model():
+    peft_model_id = 'multilabel_mistral'
+    model = AutoModelForSequenceClassification.from_pretrained(peft_model_id)
