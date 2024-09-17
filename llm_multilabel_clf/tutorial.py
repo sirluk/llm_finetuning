@@ -100,16 +100,12 @@ def load_data():
     return dataset
 
 
-def main(dataset=None):
+def main(dataset=None, model_name='mistralai/Mistral-7B-v0.1'):
     # set random seed
     random.seed(0)
 
     if dataset is None:
         dataset = load_data()
-
-    # model name
-    model_name = 'mistralai/Mistral-7B-v0.1'
-    # Alternatively, you can use a smaller model with model_name = 'echarlaix/tiny-random-mistral'
 
     # preprocess dataset with tokenizer
     def tokenize_examples(examples, tokenizer):
