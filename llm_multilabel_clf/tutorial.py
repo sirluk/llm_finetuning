@@ -103,11 +103,11 @@ def load_data():
     return label_weights, dataset, labels
 
 
-def main():
-    label_weights, dataset, labels = load_data()
-
+def main(): 
     # set random seed
     random.seed(0)
+
+    label_weights, dataset, labels = load_data()
 
     # model name
     model_name = 'mistralai/Mistral-7B-v0.1'
