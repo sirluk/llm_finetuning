@@ -21,12 +21,6 @@ from transformers import (
 )
 
 
-def tokenize_examples(examples, tokenizer):
-    tokenized_inputs = tokenizer(examples['text'])
-    tokenized_inputs['labels'] = examples['labels']
-    return tokenized_inputs
-
-
 # define custom batch preprocessor
 def collate_fn(batch, tokenizer):
     dict_keys = ['input_ids', 'attention_mask', 'labels']
@@ -100,7 +94,7 @@ def load_data():
     return dataset
 
 
-def main(dataset=None, model_name='mistralai/Mistral-7B-v0.1'):
+def main(output_dir, dataset=None, model_name='mistralai/Mistral-7B-v0.1'):
     # set random seed
     random.seed(0)
 
@@ -152,13 +146,13 @@ def main(dataset=None, model_name='mistralai/Mistral-7B-v0.1'):
 
     # define training args
     training_args = TrainingArguments(
-        output_dir='multilabel_classification',
+        output_dir=output_dir,
         learning_rate=1e-4,
         per_device_train_batch_size=8,  # tested with 16gb gpu ram
         per_device_eval_batch_size=8,
         num_train_epochs=10,
         weight_decay=0.01,
-        evaluation_strategy='epoch',
+        eval_strategy='epoch',
         save_strategy='epoch',
         load_best_model_at_end=True
     )
